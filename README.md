@@ -44,27 +44,23 @@ The project does **not** assume that “highest risk score first” is always th
 | **Business** | risk caught per analyst hour and lift vs simpler policies |
 | **Governance** | prioritization only; no autonomous enforcement |
 
-The Streamlit dashboard now exposes **30+ queue, policy, risk, learning, and analyst-efficiency KPIs**.
+The Streamlit dashboard exposes **30+ queue, policy, risk, learning, and analyst-efficiency KPIs**.
 
 ---
 
 ## Example: why highest-risk-first can be suboptimal
 
-Suppose two synthetic cases enter the queue.
-
-### Case A
+Suppose two cases enter the queue.
 
 ```text
+Case A
 Risk score          0.96
 Uncertainty         0.04
 Expected loss       $55
 Novelty             0.05
 Review time         22 min
-```
 
-### Case B
-
-```text
+Case B
 Risk score          0.72
 Uncertainty         0.61
 Expected loss       $1,120
@@ -72,17 +68,7 @@ Novelty             0.88
 Review time         8 min
 ```
 
-A pure risk ranking chooses **Case A**.
-
-ReviewerIQ may prioritize **Case B** because it combines:
-
-- meaningful immediate risk
-- much larger expected loss
-- high novelty
-- high uncertainty / learning value
-- lower review effort
-
-The project makes that tradeoff explicit and measurable.
+A pure risk ranking chooses **Case A**. ReviewerIQ may prioritize **Case B** because it combines meaningful immediate risk, much larger expected loss, high novelty, high uncertainty/learning value, and lower review effort.
 
 ---
 
@@ -113,93 +99,114 @@ flowchart LR
 
 ## Five policies under the same budget
 
-### 1. Random
+ReviewerIQ compares **random**, **risk-only**, **uncertainty-only**, **expected-value**, and **hybrid** selection under the same analyst-hour budget. The hybrid policy balances risk, expected loss, uncertainty, novelty, queue age, and review effort and ranks by **utility per review minute**.
 
-A neutral baseline.
-
-### 2. Risk-only
-
-Prioritize the highest model risk.
-
-### 3. Uncertainty-only
-
-Prioritize cases where the model is least certain.
-
-### 4. Expected-value
-
-Combine risk with expected synthetic loss.
-
-### 5. Hybrid
-
-Balance:
-
-```text
-risk
-+ expected loss
-+ uncertainty
-+ novelty
-+ queue age
-- review effort
-```
-
-The default implementation ranks by **utility per review minute** and selects cases until the analyst-hour budget is exhausted.
+The dashboard then compares severe-case recall, review precision, risk caught per analyst hour, information gain, novelty coverage, backlog, queue age, and missed severe cases.
 
 ---
 
-## Dashboard
+## Connecting ReviewerIQ to real data
 
-The interface uses the same Apple-inspired product language as the rest of the portfolio: clean white space, soft-gray surfaces, rounded cards, system typography, restrained color, and executive-first storytelling.
+ReviewerIQ can sit downstream of an existing model, rules engine, SIEM, fraud platform, case-management system, or analyst queue. It does **not** require replacing the current detector—the required input is a queue of cases with prioritization signals and an estimate of review effort.
 
-### KPI families
+### Minimum case contract
 
-**Capacity**
-- queue size
-- analyst-hour budget
-- selected cases
-- queue compression ratio
-- capacity utilization
-- capacity remaining
-- review hours consumed
-- cases reviewed per hour
+```text
+case_id             string
+created_time        timestamp
+risk                0..1
+uncertainty         0..1 optional
+expected_loss       numeric optional
+novelty             0..1 optional
+review_minutes      numeric
+age_hours           numeric / derived
+```
 
-**Risk**
-- severe prevalence
-- total severe cases
-- severe cases caught / missed
-- severe recall
-- selected severe rate
-- risk caught
-- risk capture rate
-- risk caught per analyst hour
-- severe cases caught per hour
+For evaluation, add the eventual review outcome:
 
-**Policy comparison**
-- risk-only baseline
-- random baseline
-- lift vs risk-only
-- lift vs random
-- best policy under current budget
+```text
+severe / confirmed_issue       0/1
+true_loss / realized_impact    numeric optional
+analyst_disposition            category optional
+actual_review_minutes          numeric optional
+```
 
-**Learning value**
-- mean information gain
-- total information value
-- novelty coverage
-- high-novelty reviews
-- high-uncertainty reviews
+### Practical sources
 
-**Queue quality**
-- average / P95 review time
-- selected vs overall risk
-- selected vs overall novelty
-- selected vs overall uncertainty
-- P95 queue age
-- backlog size
+| Use case | Queue / data source |
+|---|---|
+| **SOC / SecOps** | Splunk, Sentinel, Elastic, Chronicle, XDR alert exports |
+| **Fraud review** | transaction-risk engine, payment/fraud case database |
+| **Identity abuse** | IAM anomaly pipeline, account-protection queue |
+| **Trust & Safety** | abuse reports, content/account integrity review queue |
+| **Vulnerability management** | scanner findings + asset criticality + remediation queue |
+| **AI/agent review** | low-confidence outputs, policy violations, model disagreement, eval failures |
+
+Analyst outcomes can come from ServiceNow, Jira, a SOC case system, fraud-review tooling, a custom review database, or a warehouse table.
+
+### Mapping real fields
+
+A typical adapter might derive:
+
+```text
+risk             ← existing model probability / calibrated risk score
+uncertainty      ← entropy, margin, ensemble disagreement, or 4p(1-p)
+expected_loss    ← transaction value × loss severity / asset criticality × impact
+novelty          ← distance to known cases, cluster rarity, embedding novelty
+review_minutes   ← historical median handling time by case type
+age_hours        ← current_time - case_created_time
+```
+
+### Example adapter
+
+```python
+import pandas as pd
+from engine import select_with_capacity, compare_policies
+
+cases = pd.read_parquet("security_review_queue.parquet")
+cases["age_hours"] = (
+    pd.Timestamp.utcnow() - pd.to_datetime(cases["created_time"], utc=True)
+).dt.total_seconds() / 3600
+
+selected, remaining, ranked = select_with_capacity(
+    cases,
+    policy="hybrid",
+    capacity_hours=80,
+)
+```
+
+A production implementation would normally write the selected `case_id`s back to the case system as **priority recommendations**, while keeping analyst ownership and final disposition unchanged.
+
+---
+
+## Practical significance
+
+ReviewerIQ addresses one of the most common ML-operations bottlenecks: **the detector can scale faster than human review capacity**.
+
+If a security or fraud team receives 20,000 cases but can review only 2,000, simply improving model accuracy does not answer which 2,000 should consume the available analyst time. ReviewerIQ converts that into a measurable resource-allocation problem.
+
+Practical questions it can answer include:
+
+- **How much severe risk can we cover with the analysts we have today?**
+- **Would another 20 analyst hours materially increase severe-case recall?**
+- **Are we spending too much review time on high-confidence, low-value cases?**
+- **Which uncertain/novel cases are worth reviewing because they improve future model learning?**
+- **What is the operational tradeoff between immediate loss prevention and active learning?**
+- **Which prioritization policy gives the best risk capture under the same budget?**
+
+The most useful business metric is deliberately operational:
+
+```text
+risk caught per analyst hour
+```
+
+rather than only model AUC. In practice, better review allocation can reduce queue aging, improve detection of severe cases, lower analyst workload per useful finding, and create higher-value labels for future model iterations.
+
+For management, it also creates a capacity-planning tool: instead of asking only for “more analysts,” the team can quantify **how much additional severe-risk coverage each incremental hour buys** and where the current review strategy is inefficient.
 
 ---
 
 ## Optimization objective
-
-The reference hybrid score is intentionally transparent rather than hidden inside a black-box optimizer.
 
 Conceptually:
 
@@ -210,40 +217,17 @@ priority =
   + uncertainty value
   + novelty value
   + queue-age value
-```
 
-Then:
-
-```text
 review utility = priority × information value / review minutes
 ```
 
-Cases are selected until the fixed review budget is consumed.
-
-This gives the project a clear operational unit:
-
-> **How much risk and learning value did each analyst hour buy?**
+Cases are selected until the fixed review budget is consumed. This gives the project a clear operational unit: **How much risk and learning value did each analyst hour buy?**
 
 ---
 
 ## Efficiency frontier
 
-The dashboard compares policies on:
-
-```text
-x-axis → risk caught per analyst hour
-y-axis → severe-case recall
-bubble  → information gain
-```
-
-That makes tradeoffs visible rather than forcing everything into a single score.
-
-A policy can be:
-
-- efficient but narrow
-- broad but expensive
-- good for learning but weak for immediate loss prevention
-- strong on both and therefore Pareto-preferred
+The dashboard compares policies on risk caught per analyst hour, severe-case recall, and information gain so tradeoffs remain visible rather than hidden inside a single score.
 
 ---
 
@@ -251,8 +235,8 @@ A policy can be:
 
 ```text
 .
-├── app.py                     # Apple-inspired review-operations dashboard
-├── engine.py                  # generator, policy scoring, capacity selector
+├── app.py
+├── engine.py
 ├── tests/test_engine.py
 ├── reports/evaluation.md
 ├── assets/dashboard-preview.svg
@@ -272,24 +256,11 @@ python engine.py --out artifacts --capacity-hours 80 --policy hybrid
 streamlit run app.py
 ```
 
-The CLI writes selected reviews, the policy-comparison table, and summary KPIs.
-
 ---
 
 ## What this project is demonstrating
 
-ReviewerIQ is designed to show thinking across:
-
-- human-in-the-loop ML systems
-- active-learning signals
-- expected-loss decisioning
-- constrained optimization
-- capacity planning
-- queue prioritization
-- security/fraud review operations
-- policy comparison
-- business-value measurement
-- model uncertainty and novelty
+ReviewerIQ shows thinking across human-in-the-loop ML systems, active-learning signals, expected-loss decisioning, constrained optimization, capacity planning, queue prioritization, security/fraud review operations, policy comparison, business-value measurement, model uncertainty, and novelty.
 
 ---
 
