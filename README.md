@@ -6,7 +6,7 @@
 
 **Capacity-constrained human-review optimization for security and fraud decision systems**
 
-`Risk` · `Uncertainty` · `Expected loss` · `Novelty` · `Analyst capacity` · `Policy comparison`
+`Risk` · `Uncertainty` · `Expected loss` · `Novelty` · `Analyst capacity` · `Policy comparison`\n\n[![CI](https://github.com/VinayK88/ReviewerIQ/actions/workflows/ci.yml/badge.svg)](https://github.com/VinayK88/ReviewerIQ/actions/workflows/ci.yml) [![Python](https://img.shields.io/badge/Python-3.10--3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 </div>
 
@@ -44,7 +44,7 @@ The project does **not** assume that “highest risk score first” is always th
 | **Business** | risk caught per analyst hour and lift vs simpler policies |
 | **Governance** | prioritization only; no autonomous enforcement |
 
-The Streamlit dashboard exposes **30+ queue, policy, risk, learning, and analyst-efficiency KPIs**.
+The Streamlit dashboard exposes **30+ queue, policy, risk, learning, and analyst-efficiency KPIs**. Capacity allocation skips cases that do not fit the remaining budget and continues evaluating smaller candidates.
 
 ---
 
@@ -231,6 +231,14 @@ The dashboard compares policies on risk caught per analyst hour, severe-case rec
 
 ---
 
+## Reproducible benchmark evidence
+
+CI compares all policies under an identical queue and analyst-hour budget on Python 3.10–3.12. Simpler baselines retain their stated objective; information gain is reported independently instead of contaminating the risk-only score. The workflow uploads selected cases, policy comparisons, metrics, and a deterministic manifest.
+
+See [the benchmark protocol](reports/benchmark-protocol.json) and [GitHub Actions](https://github.com/VinayK88/ReviewerIQ/actions).
+
+---
+
 ## Repository map
 
 ```text
@@ -251,7 +259,7 @@ The dashboard compares policies on risk caught per analyst hour, severe-case rec
 ## Run locally
 
 ```bash
-pip install -r requirements.txt
+pip install -e '.[dev]'
 python engine.py --out artifacts --capacity-hours 80 --policy hybrid
 streamlit run app.py
 ```

@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "project": "ReviewerIQ",
+  "synthetic": true,
+  "seed": 42,
+  "command": "python engine.py --out artifacts --rows 3000 --capacity-hours 40 --policy hybrid --seed 42",
+  "outputs": [
+    "selected_reviews.csv",
+    "policy_comparison.csv",
+    "benchmark_manifest.json",
+    "metrics.json"
+  ],
+  "integrity": "benchmark_manifest.json contains a deterministic SHA-256 of selected case identities, scores, and review durations.",
+  "ci_python": [
+    "3.10",
+    "3.11",
+    "3.12"
+  ],
+  "limitations": "Synthetic queue and loss values. ReviewerIQ prioritizes human review and does not enforce outcomes."
+}
